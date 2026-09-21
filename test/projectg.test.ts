@@ -4,11 +4,11 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { ProjectG } from '../src/store.ts';
+import { Grove, ProjectG } from '../src/store.ts';
 import { normalizeRemote } from '../src/git.ts';
 
 function git(root: string, ...args: string[]) {
-  return execFileSync('git', ['-c', 'user.name=ProjectG Test', '-c', 'user.email=test@example.invalid',
+  return execFileSync('git', ['-c', 'user.name=Grove Test', '-c', 'user.email=test@example.invalid',
     '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], {
     cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0' },
@@ -24,7 +24,7 @@ function fixture(t: any) {
   git(repo, 'remote', 'add', 'origin', 'https://github.com/example/app.git');
   writeFileSync(join(repo, 'app.ts'), 'export const retry = 3;\n');
   git(repo, 'add', 'app.ts'); git(repo, 'commit', '-m', 'fixture');
-  const store = new ProjectG(home);
+  const store = new Grove(home);
   t.after(() => { store.close(); rmSync(root, { recursive: true, force: true }); });
   return { root, home, repo, store };
 }
@@ -159,7 +159,7 @@ test('database persists across sessions and rolls back incomplete writes', t => 
   assert.throws(() => store.transaction(() => {
     store.db.prepare('DELETE FROM memories').run(); throw new Error('interrupted');
   }));
-  const reader = new ProjectG(home);
+  const reader = new Grove(home);
   try {
     assert.equal(reader.memories(a.id)[0].freshness, 'unknown');
     assert.equal(reader.index(a.id).reused, true);
@@ -167,7 +167,7 @@ test('database persists across sessions and rolls back incomplete writes', t => 
 });
 
 test('store inside checkout is rejected', t => {
-  const { repo } = fixture(t); const nested = new ProjectG(join(repo, '.projectg'));
+  const { repo } = fixture(t); const nested = new Grove(join(repo, '.projectg'));
   try { assert.throws(() => nested.register(repo), /outside/); } finally { nested.close(); }
 });
 
@@ -175,7 +175,24 @@ test('CLI help needs no store and errors use a failing exit status', () => {
   const cli = resolve('src/cli.ts');
   const help = execFileSync(process.execPath, [cli, '--help'], { encoding: 'utf8' });
   assert.match(help, /No network/);
+  assert.match(help, /Grove 0.1/);
   assert.throws(() => execFileSync(process.execPath, [cli, 'mark-deleted', 'x'], { stdio: 'pipe' }), /Command failed/);
+});
+
+test('Grove and legacy environment settings reopen retained memory', t => {
+  const { home, root, repo, store } = fixture(t);
+  assert.equal(ProjectG, Grove);
+  const checkout = store.register(repo);
+  store.remember(checkout.id, 'Retained through the rename');
+  const cli = resolve('src/cli.ts');
+  const env = { ...process.env, PROJECTG_HOME: home };
+  delete env.GROVE_HOME;
+  const legacy = JSON.parse(execFileSync(process.execPath, [cli, 'status'], { env, encoding: 'utf8' }));
+  assert.equal(legacy.checkouts[0].id, checkout.id);
+  const renamed = JSON.parse(execFileSync(process.execPath, [cli, 'memories', checkout.id], {
+    env: { ...env, GROVE_HOME: home, PROJECTG_HOME: join(root, 'unused') }, encoding: 'utf8',
+  }));
+  assert.equal(renamed[0].statement, 'Retained through the rename');
 });
 
 test('runtime has no dependencies or networking imports; only fixed local Git subprocesses', () => {
