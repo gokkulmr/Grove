@@ -4,7 +4,7 @@ import { hash, localGit } from './git.ts';
 
 export const GRAPH_VERSION = 'files-v1';
 const extensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.go', '.rs', '.java', '.kt', '.c', '.h', '.cpp', '.cs', '.rb', '.swift', '.php']);
-const excluded = new Set(['.git', '.projectg', 'node_modules', 'vendor', 'dist', 'build']);
+const excluded = new Set(['.git', '.projectg', '.grove', 'node_modules', 'vendor', 'dist', 'build']);
 export type FileFact = { path: string; hash: string; bytes: number; lines: number };
 
 export function readSafe(root: string, path: string): Buffer {

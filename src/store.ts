@@ -9,17 +9,17 @@ import { GRAPH_VERSION, manifest } from './files.ts';
 type Checkout = { id: string; repository_id: string; path: string; identity: string; status: string; snapshot_id: string | null; common: string };
 const now = () => new Date().toISOString();
 
-export class ProjectG {
+export class Grove {
   db: DatabaseSync;
   home: string;
-  constructor(home = process.env.PROJECTG_HOME || join(homedir(), '.projectg')) {
+  constructor(home = process.env.GROVE_HOME || process.env.PROJECTG_HOME || join(homedir(), '.projectg')) {
     mkdirSync(home, { recursive: true, mode: 0o700 });
     this.home = realpathSync(home);
     this.db = new DatabaseSync(join(this.home, 'projectg.sqlite'));
     chmodSync(join(this.home, 'projectg.sqlite'), 0o600);
     this.db.exec('PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;');
     const version = this.db.prepare('PRAGMA user_version').get() as any;
-    if (version.user_version > 1) { this.db.close(); throw new Error('Database is newer than this ProjectG version'); }
+    if (version.user_version > 1) { this.db.close(); throw new Error('Database is newer than this Grove version'); }
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS repositories (
         id TEXT PRIMARY KEY, identity TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL,
@@ -71,7 +71,7 @@ export class ProjectG {
     const info = inspect(path);
     const storePath = relative(info.root, this.home);
     if (!storePath || (!isAbsolute(storePath) && storePath !== '..' && !storePath.startsWith(`..${sep}`))) {
-      throw new Error('PROJECTG_HOME must be outside the registered checkout');
+      throw new Error('GROVE_HOME must be outside the registered checkout');
     }
     return this.transaction(() => {
       const existing = this.db.prepare('SELECT * FROM checkouts WHERE path=?').get(info.root) as Checkout | undefined;
@@ -210,3 +210,6 @@ export class ProjectG {
     });
   }
 }
+
+// Preserve the original API name for existing local integrations.
+export { Grove as ProjectG };

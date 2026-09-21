@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
-import { ProjectG } from './store.ts';
+import { Grove } from './store.ts';
 
-const help = `ProjectG 0.1 — offline local repository registry and file graph
+const help = `Grove 0.1 — offline local repository registry and file graph
 
 Usage: node src/cli.ts <command> [arguments]
 
@@ -15,14 +15,14 @@ Usage: node src/cli.ts <command> [arguments]
   remember <checkout-id> <statement> [--evidence <relative-file>] [--reviewed]
   memories <checkout-id>             List memory with current source-fingerprint status
 
-Options: --home <directory>          Local store (default: PROJECTG_HOME or ~/.projectg)
+Options: --home <directory>          Local store (GROVE_HOME; legacy PROJECTG_HOME or ~/.projectg)
          --help                     Show this help
 
 No network, model calls, updates, telemetry, or Git transports. File graph only:
 symbol parsing, automatic watching, source backups, MCP and team sync are not implemented.
 `;
 
-let store: ProjectG | undefined;
+let store: Grove | undefined;
 try {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
     home: { type: 'string' }, help: { type: 'boolean' }, fork: { type: 'boolean' },
@@ -34,7 +34,7 @@ try {
     const arities: Record<string, number> = { register: 1, status: 0, index: 1, graph: 1, 'mark-deleted': 1, remember: 2, memories: 1 };
     if (!Object.hasOwn(arities, command) || args.length !== arities[command]) throw new Error('Invalid command or arguments. Run with --help.');
     if (command === 'mark-deleted' && !values.confirm) throw new Error('Use --confirm only after confirming this checkout was deleted');
-    store = new ProjectG(values.home);
+    store = new Grove(values.home);
     let result: unknown;
     switch (command) {
       case 'register': result = store.register(args[0], values.fork); break;
@@ -48,6 +48,6 @@ try {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   }
 } catch (error: any) {
-  process.stderr.write(`ProjectG: ${error.message}\n`);
+  process.stderr.write(`Grove: ${error.message}\n`);
   process.exitCode = 1;
 } finally { store?.close(); }
