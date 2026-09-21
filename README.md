@@ -1,8 +1,8 @@
-# ProjectG
+# Grove
 
 **Offline repository tracking, persistent local memory, and versioned code graphs.**
 
-ProjectG is a standalone project inspired by Graft. It keeps its database outside
+Grove is a standalone project inspired by Graft. It keeps its database outside
 your checkouts, so deleting a clone does not delete its retained graph metadata or
 memory. All runtime operations stay local. There is no hosted backend, telemetry,
 update check, remote model, or Git network operation.
@@ -37,7 +37,7 @@ This is a developer prototype, not an enterprise security certification.
 
 Provision Node, Git, and these project files through your approved offline process.
 GitHub distribution and publishing are development activities, not application
-runtime features. ProjectG only reads local Git metadata; it never fetches, pulls,
+runtime features. Grove only reads local Git metadata; it never fetches, pulls,
 pushes, or contacts a remote. Remote URLs are identity hints, not authentication.
 
 ```sh
@@ -68,11 +68,11 @@ node src/cli.ts mark-deleted <checkout-id> --confirm
 ```
 
 This changes a registry status only. It deletes no source, snapshot, or memory.
-An unplugged drive can look missing; ProjectG does not infer why a path disappeared.
+An unplugged drive can look missing; Grove does not infer why a path disappeared.
 Register a new clone with the same normalized origin to recover its repository
 identity and memory. Evidence is rechecked against that clone's current source.
 
-If origin changes, ProjectG refuses to silently mix identities:
+If origin changes, Grove refuses to silently mix identities:
 
 ```sh
 node src/cli.ts register /absolute/path/to/clone --fork
@@ -85,7 +85,10 @@ snapshots and memory separately. It does not verify any remote push succeeded.
 ## Storage and boundaries
 
 Default storage: `~/.projectg/projectg.sqlite` with SQLite WAL sidecars.
-Override with `PROJECTG_HOME` or `--home /absolute/store/path`. The store must live
+Override with `GROVE_HOME` or `--home /absolute/store/path`.
+The legacy `PROJECTG_HOME` variable remains supported; `GROVE_HOME` takes precedence.
+The `.projectg` directory and `projectg.sqlite` filename are deliberately retained
+so renaming the application does not strand existing snapshots and memory. The store must live
 outside every registered checkout. New directories use private permissions and
 the database is restricted to its owner on POSIX systems. Use a dedicated directory.
 
@@ -97,7 +100,7 @@ the database is restricted to its owner on POSIX systems. Use a dedicated direct
 - This is **not a source backup**, and does not restore a deleted checkout.
 - A double-read check detects ordinary concurrent saves; it is not an OS-level atomic filesystem snapshot.
 - Two people on different devices cannot coordinate through this offline application.
-  Git merging happens outside ProjectG; it detects local unmerged files and waits for resolution.
+  Git merging happens outside Grove; it detects local unmerged files and waits for resolution.
 - SQL data is not encrypted automatically. Use device encryption and approved permissions.
 - Read-only local Git commands disable filesystem monitoring and lazy object fetching.
   Git/Node/OS executables and the local device remain trusted dependencies.

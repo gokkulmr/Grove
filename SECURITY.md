@@ -1,6 +1,6 @@
 # Security boundaries
 
-ProjectG is an early single-user local prototype. Do not treat it as a sandbox or
+Grove is an early single-user local prototype. Do not treat it as a sandbox or
 as an audited enterprise security boundary.
 
 The runtime has no networking features and invokes only fixed read-only local Git

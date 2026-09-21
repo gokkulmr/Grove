@@ -1,5 +1,5 @@
 {
-  "name": "projectg",
+  "name": "grove",
   "version": "0.1.0",
   "private": true,
   "description": "Offline repository tracking, immutable file graphs, and persistent local memory.",
