@@ -1,6 +1,6 @@
 # Architecture
 
-ProjectG owns its storage and runtime. Graft is a reference, not an installed dependency.
+Grove owns its storage and runtime. Graft is a reference, not an installed dependency.
 
 ```mermaid
 flowchart LR
@@ -56,7 +56,7 @@ No automatic model-generated memory or automatic promotion is present.
 from explicit deletion. `mark-deleted --confirm` records an event after absence is
 observed. Reappearance can reactivate a checkout. Remote/common-directory mismatch
 is identity-changed. Merge conflicts are reported from Git's unmerged index entries;
-ProjectG will not index that checkout until Git records them as resolved.
+Grove will not index that checkout until Git records them as resolved.
 
 Historical file snapshots remain queryable in the database, but are never labeled
 current through `graph` when the checkout is missing, conflicted, or inaccessible.
@@ -65,5 +65,5 @@ current through `graph` when the checkout is missing, conflicted, or inaccessibl
 
 Runtime dependencies are Node built-ins and local Git. There is no socket listener,
 HTTP client, updater, telemetry, package download, or LLM integration. Development
-publishing to GitHub is external to ProjectG. A strict organization rollout must also
+publishing to GitHub is external to Grove. A strict organization rollout must also
 deny egress at the operating-system boundary and audit the child-process environment.
