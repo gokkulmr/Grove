@@ -4,7 +4,10 @@ Grove owns its storage and runtime. Graft is a reference, not an installed depen
 
 ```mermaid
 flowchart LR
-  CLI[Local CLI] --> Registry[Repository and checkout registry]
+  MCP[Checkout-bound stdio MCP] --> Context[Bounded context retrieval]
+  CLI[Local CLI] --> Context
+  Context --> Registry
+  CLI --> Registry[Repository and checkout registry]
   Registry --> Git[Fixed read-only Git queries]
   Registry --> Files[Tracked source manifest]
   Files --> Snapshots[Immutable SQLite snapshots]
@@ -67,3 +70,12 @@ Runtime dependencies are Node built-ins and local Git. There is no socket listen
 HTTP client, updater, telemetry, package download, or LLM integration. Development
 publishing to GitHub is external to Grove. A strict organization rollout must also
 deny egress at the operating-system boundary and audit the child-process environment.
+
+## Bounded context retrieval
+
+The 0.2 context builder refreshes one checkout snapshot, ranks file paths and
+reviewed memory by query-word matches, and checks evidence against that snapshot.
+It excludes stale/candidate memories and returns whole items under a compact JSON
+byte limit. Snapshot IDs and omitted-result counts expose freshness and coverage.
+The stdio MCP process fixes its checkout at startup; no tool can rebind it or write
+memories. Snapshot refresh still writes cache metadata and events. See [MCP](MCP.md).

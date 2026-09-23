@@ -4,8 +4,13 @@ Grove is an early single-user local prototype. Do not treat it as a sandbox or
 as an audited enterprise security boundary.
 
 The runtime has no networking features and invokes only fixed read-only local Git
-queries. Tests check this surface statically. OS-level network-denial tests and
-cross-platform child-process hardening are still required before strict deployment.
+queries. Tests check this surface statically, and the 17-test suite passed with
+macOS network denial on 2026-09-23. Cross-platform child-process hardening and
+deployment-specific checks are still required before strict deployment.
+
+The stdio MCP server exposes metadata and reviewed memory to its local client.
+A client may transmit those results independently; strict device-only use requires
+an approved offline client/model with egress disabled. Each server binds one checkout.
 
 The database contains repository identifiers, absolute checkout paths, file metadata,
 and user-provided memory text. It is not encrypted. Access must be controlled by

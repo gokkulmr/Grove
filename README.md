@@ -7,9 +7,9 @@ your checkouts, so deleting a clone does not delete its retained graph metadata 
 memory. All runtime operations stay local. There is no hosted backend, telemetry,
 update check, remote model, or Git network operation.
 
-## Status: first implementation
+## Status: 0.2 developer preview
 
-Version 0.1 implements the storage and correctness foundation:
+Version 0.2 implements the storage and correctness foundation:
 
 - SQLite registry shared by local clones and local sessions.
 - SSH/HTTPS remote normalization; repository names alone never determine identity.
@@ -22,9 +22,11 @@ Version 0.1 implements the storage and correctness foundation:
 - Local Git merge-conflict detection; affected checkouts cannot publish current graphs.
 - Candidate/reviewed memory with source-file fingerprints and matching/stale/unknown status.
 - A JSON CLI and integration tests using temporary repositories.
+- Ranked search of tracked file paths and reviewed memory, with bounded UTF-8 output.
+- A checkout-bound local stdio MCP server exposing `grove_context`.
 
 **Not implemented yet:** function/class extraction, call graphs, Tree-sitter,
-full-text retrieval, token budgeting, automatic watching, MCP, prompt rewriting,
+source-content search, exact token budgeting, automatic watching, prompt rewriting,
 source backup/restore, multi-user access control, and cross-device sync.
 The graph currently contains repository and file nodes with `contains` edges.
 This is a developer prototype, not an enterprise security certification.
@@ -105,6 +107,19 @@ the database is restricted to its owner on POSIX systems. Use a dedicated direct
 - Read-only local Git commands disable filesystem monitoring and lazy object fetching.
   Git/Node/OS executables and the local device remain trusted dependencies.
 
+## Agent context
+
+```sh
+node src/cli.ts context <checkout-id> "retry policy" --max-bytes 8192
+node src/mcp.ts --checkout <checkout-id>
+```
+
+Context retrieval searches paths and reviewed memory text, refreshes the snapshot,
+and excludes candidate or stale memory. Output identifies omitted results and
+excluded files. The byte limit applies to compact JSON, excluding its trailing
+newline and MCP framing; it is not an exact model token budget. Source bodies are
+not returned. See [local MCP setup and boundaries](docs/MCP.md).
+
 ## Development
 
 ```sh
@@ -115,8 +130,9 @@ Tests create only local temporary repositories, never contact GitHub, and cover
 delete/re-clone recovery, dirty-copy isolation, worktrees, changed remotes, merge
 conflicts, stale memory, symlink exclusion, and transactional persistence.
 The dependency/network surface test is a static regression check, **not proof of
-OS-enforced egress isolation**. Deployment-level network-denial validation remains
-part of the hardening roadmap.
+OS-enforced egress isolation**. The 17-test suite also passed under macOS
+`sandbox-exec` with `(deny network*)` on 2026-09-23. This validates those exercised
+paths on this machine; deployment-level and cross-platform checks remain pending.
 
 See [architecture](docs/ARCHITECTURE.md), [roadmap](docs/ROADMAP.md), and
 [security boundaries](SECURITY.md).

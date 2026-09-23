@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Grove, ProjectG } from '../src/store.ts';
 import { normalizeRemote } from '../src/git.ts';
+import { context } from '../src/context.ts';
 
 function git(root: string, ...args: string[]) {
   return execFileSync('git', ['-c', 'user.name=Grove Test', '-c', 'user.email=test@example.invalid',
@@ -175,7 +176,7 @@ test('CLI help needs no store and errors use a failing exit status', () => {
   const cli = resolve('src/cli.ts');
   const help = execFileSync(process.execPath, [cli, '--help'], { encoding: 'utf8' });
   assert.match(help, /No network/);
-  assert.match(help, /Grove 0.1/);
+  assert.match(help, /Grove 0.2/);
   assert.throws(() => execFileSync(process.execPath, [cli, 'mark-deleted', 'x'], { stdio: 'pipe' }), /Command failed/);
 });
 
@@ -203,5 +204,70 @@ test('runtime has no dependencies or networking imports; only fixed local Git su
     assert.doesNotMatch(source, /(?:from\s*|import\s*\()['"](?:node:)?(?:https?|https?2|net|tls|dns|dgram|undici)['"]/);
     assert.doesNotMatch(source, /\b(?:fetch|WebSocket)\s*\(/);
     if (file !== 'git.ts') assert.doesNotMatch(source, /node:child_process/);
+  }
+});
+
+test('context uses current checkout evidence, excludes candidates and enforces UTF-8 budgets', t => {
+  const { store, repo } = fixture(t);
+  const checkout = store.register(repo);
+  store.remember(checkout.id, 'retry candidate must stay out');
+  store.remember(checkout.id, 'retry is bounded', 'app.ts', true);
+  for (let i = 0; i < 5; i++) store.remember(checkout.id, `retry ${i} ${'界'.repeat(800)}`, 'app.ts', true);
+  const small = context(store, checkout.id, 'retry app', 1024);
+  assert.ok(Buffer.byteLength(JSON.stringify(small)) <= 1024);
+  assert.ok(small.omitted > 0);
+  assert.equal(small.withheldMemories, 1);
+  assert.ok(small.items.every(item => !item.statement?.includes('candidate')));
+  assert.deepEqual(context(store, checkout.id, 'retry app', 1024), small);
+  writeFileSync(join(repo, 'app.ts'), 'export const retry = 4;\n');
+  const changed = context(store, checkout.id, 'retry');
+  assert.notEqual(changed.snapshotId, small.snapshotId);
+  assert.equal(changed.items.length, 0);
+  assert.equal(changed.withheldMemories, 7);
+  assert.throws(() => context(store, checkout.id, '   '), /Query/);
+  assert.throws(() => context(store, checkout.id, 'retry', 1), /maxBytes/);
+  rmSync(repo, { recursive: true });
+  assert.throws(() => context(store, checkout.id, 'retry'), /missing/);
+});
+
+test('MCP stdio negotiates, binds one checkout and handles malformed requests', t => {
+  const { store, home, repo } = fixture(t);
+  const checkout = store.register(repo);
+  store.remember(checkout.id, 'retry is bounded', 'app.ts', true);
+  const rpc = (id: number, method: string, params?: any) => ({ jsonrpc: '2.0', id, method, params });
+  const messages = [
+    rpc(0, 'tools/list'),
+    rpc(1, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } }),
+    { jsonrpc: '2.0', method: 'notifications/initialized' },
+    rpc(2, 'tools/list'),
+    rpc(3, 'tools/call', { name: 'grove_context', arguments: { query: 'retry', maxBytes: 1024 } }),
+    rpc(4, 'tools/call', { name: 'grove_context', arguments: { query: 'retry', checkoutId: 'other' } }),
+    rpc(5, 'tools/call', { name: 'grove_context', arguments: { query: '' } }),
+    rpc(6, 'unknown'),
+  ];
+  const output = execFileSync(process.execPath, [resolve('src/mcp.ts'), '--home', home, '--checkout', checkout.id], {
+    input: messages.map(message => JSON.stringify(message)).join('\n') + '\n{bad}\n', encoding: 'utf8', timeout: 20000,
+  }).trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(output.length, 8);
+  assert.equal(output[0].error.code, -32002);
+  assert.equal(output[1].result.protocolVersion, '2025-06-18');
+  assert.equal(output[2].result.tools[0].name, 'grove_context');
+  const data = JSON.parse(output[3].result.content[0].text);
+  assert.equal(data.checkoutId, checkout.id);
+  assert.equal(data.items[0].statement, 'retry is bounded');
+  assert.ok(Buffer.byteLength(output[3].result.content[0].text) <= 1024);
+  assert.equal(output[4].error.code, -32602);
+  assert.equal(output[5].result.isError, true);
+  assert.equal(output[6].error.code, -32601);
+  assert.equal(output[7].error.code, -32700);
+});
+
+test('MCP fails closed on oversized and incomplete input', t => {
+  const { store, home, repo } = fixture(t);
+  const checkout = store.register(repo);
+  for (const input of ['x'.repeat(65537), '{"jsonrpc":"2.0"}']) {
+    assert.throws(() => execFileSync(process.execPath, [resolve('src/mcp.ts'), '--home', home, '--checkout', checkout.id], {
+      input, stdio: ['pipe', 'pipe', 'pipe'], timeout: 5000,
+    }), /Command failed/);
   }
 });

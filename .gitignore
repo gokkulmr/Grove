@@ -10,3 +10,5 @@ coverage/
 # Original local research notes remain on this device; the public contract is docs/.
 /RESEARCH_AND_PLAN.md
 /BOTTLENECKS_AND_CONCEPTS.md
+
+/artifacts/
