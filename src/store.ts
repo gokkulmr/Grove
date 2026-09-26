@@ -2,9 +2,11 @@ import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import { chmodSync, mkdirSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
 import { hash, inspect } from './git.ts';
 import { GRAPH_VERSION, manifest } from './files.ts';
+import { loadPolicy, policyKey } from './policy.ts';
+import { PARSER_VERSION, parseFile, supports, type ParseFacts } from './symbols.ts';
 
 type Checkout = { id: string; repository_id: string; path: string; identity: string; status: string; snapshot_id: string | null; common: string };
 const now = () => new Date().toISOString();
@@ -45,6 +47,14 @@ export class Grove {
         id TEXT PRIMARY KEY, repository_id TEXT NOT NULL REFERENCES repositories(id),
         statement TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('candidate','reviewed')),
         evidence_path TEXT, evidence_hash TEXT, created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS parse_cache (
+        content_hash TEXT NOT NULL, language TEXT NOT NULL, parser_version TEXT NOT NULL, facts_json TEXT NOT NULL,
+        PRIMARY KEY(content_hash, language, parser_version)
+      );
+      CREATE TABLE IF NOT EXISTS snapshot_facts (
+        snapshot_id TEXT NOT NULL REFERENCES snapshots(id), path TEXT NOT NULL, facts_json TEXT NOT NULL,
+        PRIMARY KEY(snapshot_id,path)
       );
       CREATE TABLE IF NOT EXISTS events (
         id INTEGER PRIMARY KEY, checkout_id TEXT NOT NULL REFERENCES checkouts(id),
@@ -147,15 +157,30 @@ export class Grove {
     if (start.root !== checkout.path || start.identity !== checkout.identity || start.common !== checkout.common || start.conflicts.length) {
       throw new Error('Checkout identity or conflict state changed before indexing; retry');
     }
-    const first = manifest(checkout.path);
+    const policy = loadPolicy(this.home);
+    const first = manifest(checkout.path, policy);
     // A second hash pass detects ordinary concurrent saves. This is not an OS
     // filesystem snapshot; mutations after the check are caught at the next query.
-    const second = manifest(checkout.path);
+    const second = manifest(checkout.path, policy);
     const end = inspect(checkout.path);
     if (JSON.stringify(first) !== JSON.stringify(second) || JSON.stringify(start) !== JSON.stringify(end)) {
       throw new Error('Checkout changed during indexing; retry');
     }
-    const snapshotId = hash(JSON.stringify([checkout.repository_id, GRAPH_VERSION, end.head, second]));
+    const snapshotId = hash(JSON.stringify([checkout.repository_id, GRAPH_VERSION, PARSER_VERSION, policyKey(policy), end.head, second]));
+    const parsed = new Map<string, ParseFacts>();
+    let cacheHits = 0;
+    for (const file of second.files) {
+      if (!supports(file.path)) continue;
+      const cached = this.db.prepare('SELECT facts_json FROM parse_cache WHERE content_hash=? AND language=? AND parser_version=?')
+        .get(file.hash, file.path.split('.').pop(), PARSER_VERSION) as any;
+      if (cached) { parsed.set(file.path, JSON.parse(cached.facts_json)); cacheHits++; }
+      else {
+        const facts = parseFile(checkout.path, file.path, policy);
+        if (facts) parsed.set(file.path, facts);
+      }
+    }
+    const final = inspect(checkout.path);
+    if (JSON.stringify(end) !== JSON.stringify(final) || JSON.stringify(second) !== JSON.stringify(manifest(checkout.path, policy))) throw new Error('Checkout changed while parsing; retry');
     let reused = false;
     this.transaction(() => {
       reused = !!this.db.prepare('SELECT id FROM snapshots WHERE id=?').get(snapshotId);
@@ -163,21 +188,51 @@ export class Grove {
         this.db.prepare('INSERT INTO snapshots VALUES(?,?,?,?,?,?)')
           .run(snapshotId, checkout.repository_id, end.head, GRAPH_VERSION, now(), JSON.stringify(second.skipped));
         const insert = this.db.prepare('INSERT INTO files VALUES(?,?,?,?,?)');
-        for (const file of second.files) insert.run(snapshotId, file.path, file.hash, file.bytes, file.lines);
+        const addFacts = this.db.prepare('INSERT INTO snapshot_facts VALUES(?,?,?)');
+        const addCache = this.db.prepare('INSERT OR IGNORE INTO parse_cache VALUES(?,?,?,?)');
+        for (const file of second.files) {
+          insert.run(snapshotId, file.path, file.hash, file.bytes, file.lines);
+          const facts = parsed.get(file.path);
+          if (facts) {
+            addFacts.run(snapshotId, file.path, JSON.stringify(facts));
+            addCache.run(file.hash, file.path.split('.').pop(), PARSER_VERSION, JSON.stringify(facts));
+          }
+        }
       }
       this.db.prepare('UPDATE checkouts SET snapshot_id=?,updated_at=? WHERE id=?').run(snapshotId, now(), id);
       this.event(id, reused ? 'snapshot-reused' : 'snapshot-created');
     });
-    return { snapshotId, reused, files: second.files.length, skipped: second.skipped };
+    return { snapshotId, reused, files: second.files.length, skipped: second.skipped, parsedFiles: parsed.size, cacheHits };
   }
   graph(id: string) {
     const indexed = this.index(id);
     const checkout = this.checkout(id);
     const files = this.db.prepare('SELECT path,content_hash,bytes,lines FROM files WHERE snapshot_id=? ORDER BY path')
       .all(indexed.snapshotId) as any[];
-    return { ...indexed, repositoryId: checkout.repository_id, level: 'file',
-      nodes: [{ id: checkout.repository_id, kind: 'repository' }, ...files.map(f => ({ ...f, id: f.path, kind: 'file' }))],
-      edges: files.map(f => ({ source: checkout.repository_id, target: f.path, relation: 'contains' })) };
+    const fileSet = new Set(files.map(f => f.path));
+    const nodes: any[] = [{ id: checkout.repository_id, kind: 'repository' }, ...files.map(f => ({ ...f, id: f.path, kind: 'file' }))];
+    const edges: any[] = files.map(f => ({ source: checkout.repository_id, target: f.path, relation: 'contains' }));
+    const facts = this.db.prepare('SELECT path,facts_json FROM snapshot_facts WHERE snapshot_id=? ORDER BY path').all(indexed.snapshotId) as any[];
+    let parseErrors = 0;
+    for (const row of facts) {
+      const parsed = JSON.parse(row.facts_json) as ParseFacts;
+      if (parsed.parseErrors) parseErrors++;
+      for (const symbol of parsed.symbols) {
+        const id = `${row.path}#${symbol.kind}:${symbol.name}:${symbol.line}`;
+        nodes.push({ id, ...symbol }); edges.push({ source: row.path, target: id, relation: 'defines' });
+      }
+      for (const imp of parsed.imports) {
+        const base = posix.normalize(posix.join(posix.dirname(row.path), imp.module));
+        const targets = imp.module.startsWith('.') ? [base, ...['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py'].map(ext => base + ext), ...['/index.ts', '/index.tsx', '/index.js'].map(ext => base + ext)].filter(path => fileSet.has(path)) : [];
+        if (targets.length === 1) edges.push({ source: row.path, target: targets[0], relation: 'imports', confidence: 'local-path', line: imp.line });
+        else {
+          const id = `module:${imp.module}`;
+          if (!nodes.some(n => n.id === id)) nodes.push({ id, kind: 'module', name: imp.module });
+          edges.push({ source: row.path, target: id, relation: 'imports-unresolved', line: imp.line });
+        }
+      }
+    }
+    return { ...indexed, repositoryId: checkout.repository_id, level: 'symbols-and-imports', parseErrors, nodes, edges };
   }
   remember(id: string, statement: string, evidence?: string, reviewed = false) {
     const checkout = this.requireAvailable(id);

@@ -176,7 +176,7 @@ test('CLI help needs no store and errors use a failing exit status', () => {
   const cli = resolve('src/cli.ts');
   const help = execFileSync(process.execPath, [cli, '--help'], { encoding: 'utf8' });
   assert.match(help, /No network/);
-  assert.match(help, /Grove 0.2/);
+  assert.match(help, /Grove 0.3/);
   assert.throws(() => execFileSync(process.execPath, [cli, 'mark-deleted', 'x'], { stdio: 'pipe' }), /Command failed/);
 });
 
@@ -270,4 +270,73 @@ test('MCP fails closed on oversized and incomplete input', t => {
       input, stdio: ['pipe', 'pipe', 'pipe'], timeout: 5000,
     }), /Command failed/);
   }
+});
+
+test('bundled parsers build symbols/imports and reuse parsed artifacts across edits', t => {
+  const { repo, store } = fixture(t);
+  writeFileSync(join(repo, 'helper.ts'), 'export function helper() { return 1; }\n');
+  writeFileSync(join(repo, 'module.py'), 'from pathlib import Path\nclass Worker:\n    def run(self):\n        pass\n');
+  writeFileSync(join(repo, 'app.ts'), 'import { helper } from "./helper";\nexport function retry() { return helper(); }\n');
+  git(repo, 'add', '.'); git(repo, 'commit', '-m', 'parser fixture');
+  const id = store.register(repo).id;
+  const first = store.graph(id);
+  assert.ok(first.nodes.some((n: any) => n.kind === 'function' && n.name === 'retry'));
+  assert.ok(first.nodes.some((n: any) => n.kind === 'class' && n.name === 'Worker'));
+  assert.ok(first.nodes.some((n: any) => n.kind === 'method' && n.name === 'run'));
+  assert.ok(first.nodes.some((n: any) => n.kind === 'module' && n.name === 'pathlib'));
+  assert.ok(first.edges.some((e: any) => e.relation === 'imports' && e.target === 'helper.ts'));
+  assert.equal(first.parseErrors, 0);
+  assert.equal(store.index(id).cacheHits, 3);
+  writeFileSync(join(repo, 'app.ts'), 'export class RetryPolicy {}\n');
+  const changed = store.graph(id);
+  assert.notEqual(changed.snapshotId, first.snapshotId);
+  assert.ok(changed.nodes.some((n: any) => n.kind === 'class' && n.name === 'RetryPolicy'));
+  assert.equal(changed.nodes.some((n: any) => n.kind === 'function' && n.name === 'retry'), false);
+  assert.ok(changed.cacheHits >= 2);
+  const hits = context(store, id, 'RetryPolicy');
+  assert.ok(hits.items.some((i: any) => i.kind === 'symbol' && i.name === 'RetryPolicy'));
+});
+
+test('policy exclusions invalidate snapshots and withhold previously reviewed evidence', t => {
+  const { repo, home, store } = fixture(t);
+  const id = store.register(repo).id;
+  store.remember(id, 'Retry policy', 'app.ts', true);
+  const before = store.index(id).snapshotId;
+  writeFileSync(join(home, 'policy.json'), JSON.stringify({ denyPrefixes: ['app.ts'], sourceSearch: false }));
+  const graph = store.graph(id);
+  assert.notEqual(graph.snapshotId, before);
+  assert.equal(graph.files, 0);
+  assert.equal(context(store, id, 'Retry').withheldMemories, 1);
+  assert.throws(() => { writeFileSync(join(home, 'policy.json'), JSON.stringify({ maxFileBytes: 99999999 })); store.graph(id); }, /policy limits/);
+});
+
+test('consistent backup restores memory, rejects invalid files and never overwrites', t => {
+  const { root, repo, store } = fixture(t);
+  const id = store.register(repo).id;
+  store.index(id); store.remember(id, 'Retained evidence', 'app.ts', true);
+  const backup = join(root, 'grove-backup.sqlite');
+  const cli = resolve('src/cli.ts');
+  execFileSync(process.execPath, [cli, 'backup', backup, '--home', store.home], { encoding: 'utf8' });
+  assert.throws(() => execFileSync(process.execPath, [cli, 'backup', backup, '--home', store.home], { stdio: 'pipe' }));
+  const restored = join(root, 'restored');
+  execFileSync(process.execPath, [cli, 'restore', backup, restored], { encoding: 'utf8' });
+  const copy = new Grove(restored);
+  try { assert.equal(copy.memories(id)[0].statement, 'Retained evidence'); }
+  finally { copy.close(); }
+  assert.throws(() => execFileSync(process.execPath, [cli, 'restore', backup, restored], { stdio: 'pipe' }));
+  const broken = join(root, 'broken.sqlite'); writeFileSync(broken, 'broken');
+  assert.throws(() => execFileSync(process.execPath, [cli, 'restore', broken, join(root, 'invalid')], { stdio: 'pipe' }));
+});
+
+test('opt-in source search reports line numbers without retaining source text', t => {
+  const { repo, home, store } = fixture(t);
+  writeFileSync(join(repo, 'app.ts'), 'const secretMarker = "superSecretValue";\nexport const answer = 42;\n');
+  const id = store.register(repo).id;
+  assert.equal(context(store, id, 'superSecretValue').items.some((i: any) => i.kind === 'source-match'), false);
+  writeFileSync(join(home, 'policy.json'), JSON.stringify({ sourceSearch: true }));
+  const found = context(store, id, 'superSecretValue');
+  assert.ok(found.items.some((i: any) => i.kind === 'source-match' && i.line === 1));
+  assert.equal(found.sourceSearched, 1);
+  assert.equal(JSON.stringify(found).includes('const secretMarker'), false);
+  assert.equal(JSON.stringify(found).includes('superSecretValue'), false);
 });

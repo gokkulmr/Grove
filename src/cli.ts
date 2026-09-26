@@ -2,8 +2,9 @@
 import { parseArgs } from 'node:util';
 import { Grove } from './store.ts';
 import { context } from './context.ts';
+import { backup, restoreBackup } from './backup.ts';
 
-const help = `Grove 0.2 — offline local repository registry and file graph
+const help = `Grove 0.3 — offline repository graphs and memory
 
 Usage: node src/cli.ts <command> [arguments]
 
@@ -15,14 +16,17 @@ Usage: node src/cli.ts <command> [arguments]
                                     Record user-confirmed deletion; deletes no files or memory
   remember <checkout-id> <statement> [--evidence <relative-file>] [--reviewed]
   memories <checkout-id>             List memory with current source-fingerprint status
+  backup <new-sqlite-file>           Make a consistent, owner-only store backup
+  restore <sqlite-file> <new-home>   Restore into a new local store directory
   context <checkout-id> <query> [--max-bytes <1024..32768>]
                                     Search paths and matching reviewed memory (compact JSON)
 
 Options: --home <directory>          Local store (GROVE_HOME; legacy PROJECTG_HOME or ~/.projectg)
          --help                     Show this help
 
-No network, model calls, updates, telemetry, or Git transports. File graph only:
-symbol parsing, automatic watching, source backups and team sync are not implemented.
+No network, model calls, updates, telemetry, or Git transports.
+Bundled parsers cover TypeScript, JavaScript and Python; other languages have file-level graphs.
+Automatic watching, source backups and team sync are not implemented.
 Local MCP entrypoint: node src/mcp.ts --checkout <checkout-id> [--home <directory>]
 `;
 
@@ -36,19 +40,21 @@ try {
   const [command, ...args] = positionals;
   if (values.help || !command) process.stdout.write(help);
   else {
-    const arities: Record<string, number> = { register: 1, status: 0, index: 1, graph: 1, 'mark-deleted': 1, remember: 2, memories: 1, context: 2 };
+    const arities: Record<string, number> = { backup: 1, restore: 2, register: 1, status: 0, index: 1, graph: 1, 'mark-deleted': 1, remember: 2, memories: 1, context: 2 };
     if (!Object.hasOwn(arities, command) || args.length !== arities[command]) throw new Error('Invalid command or arguments. Run with --help.');
     if (command === 'mark-deleted' && !values.confirm) throw new Error('Use --confirm only after confirming this checkout was deleted');
-    store = new Grove(values.home);
-    let result: unknown;
+    if (command !== 'restore') store = new Grove(values.home);
+    let result: unknown = command === 'restore' ? restoreBackup(args[0], args[1]) : undefined;
     switch (command) {
-      case 'register': result = store.register(args[0], values.fork); break;
-      case 'status': result = store.list(); break;
-      case 'index': result = store.index(args[0]); break;
-      case 'graph': result = store.graph(args[0]); break;
-      case 'mark-deleted': result = store.markDeleted(args[0]); break;
-      case 'remember': result = store.remember(args[0], args[1], values.evidence, values.reviewed); break;
-      case 'memories': result = store.memories(args[0]); break;
+      case 'backup': result = backup(store!, args[0]); break;
+      case 'restore': break;
+      case 'register': result = store!.register(args[0], values.fork); break;
+      case 'status': result = store!.list(); break;
+      case 'index': result = store!.index(args[0]); break;
+      case 'graph': result = store!.graph(args[0]); break;
+      case 'mark-deleted': result = store!.markDeleted(args[0]); break;
+      case 'remember': result = store!.remember(args[0], args[1], values.evidence, values.reviewed); break;
+      case 'memories': result = store!.memories(args[0]); break;
       case 'context': result = context(store, args[0], args[1], values['max-bytes'] === undefined ? undefined : Number(values['max-bytes'])); break;
     }
     process.stdout.write(`${JSON.stringify(result, null, command === 'context' ? undefined : 2)}\n`);

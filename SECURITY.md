@@ -9,6 +9,9 @@ macOS network denial on 2026-09-23. Cross-platform child-process hardening and
 deployment-specific checks are still required before strict deployment.
 
 The stdio MCP server exposes metadata and reviewed memory to its local client.
+Bundled WASM parsers process tracked source locally. Optional source search scans
+current bytes and returns paths/line numbers, without retaining text. Backup files
+contain the same sensitive metadata and memory as the live SQLite store.
 A client may transmit those results independently; strict device-only use requires
 an approved offline client/model with egress disabled. Each server binds one checkout.
 

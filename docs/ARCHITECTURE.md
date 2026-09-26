@@ -42,8 +42,10 @@ An existing identical snapshot is reused. SQLite serializes writers with a busy
 timeout; readers can retain the last complete view through WAL. A dedicated job
 coordinator and large-repository incremental artifact store are later work.
 
-The published graph is deliberately file-level. `contains` is the only relation.
-We do not approximate semantic call relationships with regexes and claim they are resolved.
+The 0.3 graph includes file and parser-derived function, class, method and import
+nodes for TypeScript, JavaScript and Python. Relative imports connect when one
+indexed path resolves. Unresolved imports are explicitly labeled. Call edges are
+not inferred. Parsed facts are cached by content hash, language and parser version.
 
 ## Memory
 
@@ -73,9 +75,17 @@ deny egress at the operating-system boundary and audit the child-process environ
 
 ## Bounded context retrieval
 
-The 0.2 context builder refreshes one checkout snapshot, ranks file paths and
-reviewed memory by query-word matches, and checks evidence against that snapshot.
+The 0.3 context builder refreshes one checkout snapshot, ranks file paths,
+parsed names and reviewed memory by query-word matches, and checks evidence against
+that snapshot. Optional source search scans current bytes without returning bodies.
 It excludes stale/candidate memories and returns whole items under a compact JSON
 byte limit. Snapshot IDs and omitted-result counts expose freshness and coverage.
 The stdio MCP process fixes its checkout at startup; no tool can rebind it or write
 memories. Snapshot refresh still writes cache metadata and events. See [MCP](MCP.md).
+
+## Policy and backup
+
+A store-owned `policy.json` restricts indexed extensions, file size/count and
+path prefixes; its hash contributes to snapshot identity. `VACUUM INTO` creates
+a consistent SQLite backup. Restore validates integrity/schema into a new home.
+Source files are not backed up by Grove.

@@ -17,19 +17,27 @@
 - One-checkout-per-process stdio MCP tool with protocol integration tests.
 - Legacy storage compatibility under the Grove name.
 
-## Next: code graph and robust persistence
+## Implemented in 0.3 release candidate
 
-1. Bundle approved Tree-sitter grammars offline; begin with TypeScript and Python.
-2. Extract symbols and imports with resolution confidence and parser-version cache keys.
-3. Incremental artifact reuse, dependency invalidation, and a queued indexing service.
-4. Configurable administrator-owned allow/deny policy; source data retention decisions.
-5. Optional explicit source backup, consistent database backup/restore, and migrations.
-6. Stronger file capture against concurrent filesystem mutation; platform egress tests.
+- Bundled Tree-sitter grammars for TypeScript, JavaScript and Python; symbols/imports
+  and parsed-file cache keyed by file hash and parser version.
+- Store policy for extension, prefix, size and file-count limits.
+- Optional on-demand source search returning line numbers without source text.
+- SQLite backup/restore with integrity checks and no overwrite.
+
+## Before organization production use
+
+1. Real-client acceptance on supported Codex, Claude Code and Copilot versions.
+2. Representative large-repository and concurrent-client benchmarks.
+3. Incremental manifest reuse and queued indexing; current file hashing is repeated.
+4. Security review of bundled parsers and stronger file capture under races.
+5. Cross-platform network-denial checks, installer/distribution testing and backup drills.
+6. Administrator rollout policy, migrations and multi-user access boundaries.
 
 ## Then: agent access and context efficiency
 
 - Real-client acceptance tests for the stdio MCP server; version-tested adapters.
-- Source-content search, graph traversal and measured model token budgets.
+- Richer source search, graph traversal and measured model token budgets.
 - Memory revision, contradiction and supersession workflows.
 - Context epochs and evidence delivery tracking across compaction.
 - Deterministic prompt preparation preserving original user intent.

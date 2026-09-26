@@ -37,7 +37,7 @@ export function session(store: Grove, checkoutId: string) {
       if (!p || typeof p.protocolVersion !== 'string' || !p.capabilities || typeof p.capabilities !== 'object' ||
           !p.clientInfo || typeof p.clientInfo.name !== 'string' || typeof p.clientInfo.version !== 'string') return error(-32602, 'Invalid initialization parameters');
       initialized = true;
-      return ok({ protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'grove', version: '0.2.0' } });
+      return ok({ protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'grove', version: '0.3.0' } });
     }
     if (!ready) return error(-32002, 'Initialize this session first');
     if (message.method === 'tools/list') return ok({ tools: [tool] });

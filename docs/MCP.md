@@ -1,4 +1,4 @@
-# Local agent context (0.2 developer preview)
+# Local agent context (0.3 release candidate)
 
 Grove implements a narrow MCP server using the pinned
 [2025-06-18 stdio specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports),
@@ -45,9 +45,10 @@ contacted by Grove itself. Memory text and paths can contain confidential data.
 
 `grove_context` takes `query` (1–1000 characters containing at least one word) and
 optional `maxBytes` (1024–32768, default 8192). It searches case-insensitive substrings
-of query words in file paths and memory text. Matches are OR-based, ranked by the
+of query words in file paths, parsed symbol/import names and memory text. Matches are OR-based, ranked by the
 number of distinct matching words; stable ties use kind and path/memory ID.
-This is a metadata search, not semantic or source-content search.
+With store policy `sourceSearch: true`, current source bytes are scanned on demand;
+only paths and line numbers are returned. This is lexical search, not semantic search.
 
 Each call reindexes the bound checkout before retrieval. Only reviewed memories
 with matching source-file hashes are included. Candidates and stale memories are

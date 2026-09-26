@@ -1,6 +1,6 @@
 {
   "name": "grove",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Offline repository tracking, immutable file graphs, and persistent local memory.",
   "type": "module",
