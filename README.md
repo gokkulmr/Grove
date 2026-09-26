@@ -8,7 +8,42 @@ telemetry, model API, socket listener, or Git remote transport.
 
 **Status: 0.3 release candidate for controlled testing.** No organization-wide
 production claim has been made. The required acceptance checks are listed below.
-The project is MIT licensed. Graft inspired the design; no Graft source is copied.
+The project is MIT licensed. [Graft](https://github.com/trailhq/Graft) inspired the onboarding and graph design;
+no Graft source is copied.
+
+## Quick start
+
+From the Grove source directory, make the optional local CLI link once. This
+links the files already on your device; it needs no package download:
+
+```sh
+npm link --offline --ignore-scripts --no-audit --no-fund
+cd /absolute/path/to/your/code/repository
+grove init --dry-run
+grove init
+```
+
+`grove init` registers the current Git checkout, builds its graph and prints the
+checkout ID plus an absolute local MCP command for an approved coding agent.
+`--dry-run` previews the repository, store and file counts without creating a
+store or changing the repository. Repeating `grove init` reuses the same checkout
+record and snapshot when nothing changed. Neither command edits your repository
+or agent configuration. The persistent store lives outside the clone, so another
+clone with the same normalized Git origin can use its retained memory.
+
+If global npm links are restricted, use the bundled CLI directly from anywhere:
+
+```sh
+node /absolute/path/to/Grove/src/cli.ts init --dry-run
+node /absolute/path/to/Grove/src/cli.ts init
+```
+
+To initialize a specific checkout without changing directories, run
+`grove init /absolute/path/to/checkout`. Use `--home /absolute/store` to choose a
+private store. To recognize an intentional origin change, use `grove init --fork`.
+For agent setup, paste the printed `mcp.command` and `mcp.args` into your local
+client's stdio MCP settings; use the configuration example below. Grove does not
+contact an agent provider or configure cloud access.
 
 ## What works
 
@@ -40,22 +75,17 @@ The project is MIT licensed. Graft inspired the design; no Graft source is copie
   offline distribution method. Publishing this source to GitHub is a development
   activity outside the application's runtime.
 
-From a copy of this repository:
+Use `grove --help` for every command. `grove init` is the usual first command.
+The lower-level `register` and `index` commands remain available when you need
+to run those steps separately. The init output contains a checkout `id`; use it
+in later commands:
 
 ```sh
-node src/cli.ts --help
-node src/cli.ts register /absolute/path/to/a/checkout
-node src/cli.ts status
-```
-
-The register output contains a checkout `id`. Use it in later commands:
-
-```sh
-node src/cli.ts index <checkout-id>
-node src/cli.ts graph <checkout-id>
-node src/cli.ts remember <checkout-id> "Retries are bounded." --evidence src/retry.ts --reviewed
-node src/cli.ts memories <checkout-id>
-node src/cli.ts context <checkout-id> "retry" --max-bytes 8192
+grove index <checkout-id>
+grove graph <checkout-id>
+grove remember <checkout-id> "Retries are bounded." --evidence src/retry.ts --reviewed
+grove memories <checkout-id>
+grove context <checkout-id> "retry" --max-bytes 8192
 ```
 
 The example evidence file must be a tracked source file included by policy.
@@ -71,7 +101,7 @@ it also finds matching source lines without returning their text.
 An unplugged drive can also appear missing. After you know a clone was deleted:
 
 ```sh
-node src/cli.ts mark-deleted <checkout-id> --confirm
+grove mark-deleted <checkout-id> --confirm
 ```
 
 That records a user-confirmed state; graphs and memory remain. Register a new
@@ -80,7 +110,7 @@ Evidence is checked against that clone's current files. If an origin changes,
 Grove blocks silent identity mixing. To record the new identity and lineage:
 
 ```sh
-node src/cli.ts register /absolute/path/to/checkout --fork
+grove register /absolute/path/to/checkout --fork
 ```
 
 Grove does not perform fetch, pull, push or merge. Multiple people working on the
@@ -128,9 +158,9 @@ A consistent backup includes graphs, repository records and memory, **not source
 files**. Choose a new destination filename; Grove refuses to overwrite one.
 
 ```sh
-node src/cli.ts backup /absolute/backup/grove-2026-09-26.sqlite
-node src/cli.ts restore /absolute/backup/grove-2026-09-26.sqlite /absolute/new-grove-store
-node src/cli.ts status --home /absolute/new-grove-store
+grove backup /absolute/backup/grove-2026-09-26.sqlite
+grove restore /absolute/backup/grove-2026-09-26.sqlite /absolute/new-grove-store
+grove status --home /absolute/new-grove-store
 ```
 
 Restore requires a nonexistent destination directory and checks database integrity
@@ -145,16 +175,38 @@ copy. Do not copy the live `.sqlite` file alone while Grove is running.
 Grove's MCP server is a local subprocess, bound to one checkout. Run it directly:
 
 ```sh
-node src/mcp.ts --checkout <checkout-id> --home /absolute/grove-store
+node /absolute/path/to/Grove/src/mcp.ts --checkout <checkout-id> --home /absolute/grove-store
 ```
 
-For an agent, point its stdio MCP configuration at an **absolute** Node executable
-and an **absolute** `src/mcp.ts` path. Set `--checkout` to the registered ID and
-optionally `--home` to the store. An example configuration and the protocol
-boundaries are in [docs/MCP.md](docs/MCP.md). The only tool, `grove_context`, accepts
-`query` and optional `maxBytes` (1024–32768). It cannot switch checkouts or write
-memory. Start a separate server per checkout. Real-client compatibility with
-specific Codex, Claude Code and Copilot versions still needs acceptance testing.
+The `grove init` output contains the exact absolute command and arguments for
+your checkout. Paste them into your client’s **local stdio MCP** configuration.
+Configuration keys vary by client; this is the common shape:
+
+```json
+{
+  "mcpServers": {
+    "grove": {
+      "command": "/absolute/path/to/node",
+      "args": [
+        "/absolute/path/to/Grove/src/mcp.ts",
+        "--checkout", "REGISTERED_CHECKOUT_ID",
+        "--home", "/absolute/path/to/local-store"
+      ]
+    }
+  }
+}
+```
+
+The server follows MCP's
+[stdio transport](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
+and advertises protocol version 2025-06-18. Its only tool,
+`grove_context`, accepts `query` and optional `maxBytes` (1024–32768). It
+refreshes the bound checkout, returns matching file paths, symbol/import names
+and reviewed memory, and reports omissions. It does not switch checkouts or
+write memory. Start a separate server per checkout. The server inherits the
+current user's filesystem permissions; checkout binding is application-level
+scoping, not an operating-system sandbox. Specific Codex, Claude Code and
+Copilot versions still need live compatibility tests.
 
 **An offline Grove process does not make its coding agent offline.** Cloud-backed
 agents may send returned context to their providers. Strict device-only use needs
@@ -173,13 +225,33 @@ backup/restore and MCP protocol behavior. On macOS, the suite can be run under
 The application needs target-platform network-denial, permissions and live-agent
 tests before an organization-wide release.
 
-Release acceptance still requires representative large-repository latency and
-memory benchmarks, parser behavior across supported languages, simultaneous
-client access, backup recovery on a second device, and a security review of the
-bundled parser and filesystem boundary. Grove cannot promise exact token savings
-until it is compared against a pinned baseline on real tasks. No automatic prompt
-rewriting, contradiction resolution, source backup, or cross-device sync exists.
+Before an organization-wide release, record the exact OS, Node/Git versions,
+agent versions, repository size, policy and results for these checks:
 
-See the [acceptance test plan](docs/TESTING.md), [architecture](docs/ARCHITECTURE.md),
-[MCP guide](docs/MCP.md),
-[roadmap](docs/ROADMAP.md), and [security boundaries](SECURITY.md).
+1. **Offline launch:** provision from offline media and run the suite with egress
+   denied. Confirm no runtime download, telemetry or Git remote operation.
+2. **Lifecycle:** run `grove init --dry-run` and check no store is created. Run
+   `grove init` twice; verify the same checkout ID and snapshot. Repeat across
+   clones and branches, delete a clone, mark it deleted, and re-clone. Verify
+   retained memory appears only when its source evidence still matches.
+3. **Conflict and parsing:** create a local merge conflict; `graph` and `context`
+   must fail until resolved. Test TypeScript, JavaScript and Python symbols and
+   imports, plus explicit unresolved edges.
+4. **Policy and recovery:** deny a path, change policy, and verify new snapshots
+   and stale evidence. Back up and restore to a fresh directory; confirm
+   memory, graph and no-overwrite behavior. A backup contains no source files.
+5. **Agents:** connect each approved *offline* client version via the printed
+   stdio command. List tools, call `grove_context`, switch branches, and verify
+   it cannot retrieve another checkout's current context.
+6. **Scale and security:** measure first/repeat indexing and peak memory on
+   representative 1k, 10k and largest target repositories. Test concurrent
+   clients, edits during indexing, filesystem permissions and network denial
+   on every target OS. Set pass thresholds before rollout.
+
+Compare output bytes, model tokens, task time and correctness against pinned
+no-Grove and Graft baselines. Grove has no measured savings claim yet. Current
+limitations include repeated full-file hashing, no automatic prompt rewriting,
+contradiction resolution, source backup, or cross-device synchronization.
+
+[Security boundaries](SECURITY.md) give the data and trust model. The full CLI
+command list is available with `grove --help`.

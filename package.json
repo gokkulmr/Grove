@@ -2,6 +2,7 @@
   "name": "grove",
   "version": "0.3.0",
   "private": true,
+  "bin": { "grove": "./src/cli.ts" },
   "description": "Offline repository tracking, immutable file graphs, and persistent local memory.",
   "type": "module",
   "license": "MIT",
