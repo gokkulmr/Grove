@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Grove, ProjectG } from '../src/store.ts';
@@ -339,4 +339,28 @@ test('opt-in source search reports line numbers without retaining source text', 
   assert.equal(found.sourceSearched, 1);
   assert.equal(JSON.stringify(found).includes('const secretMarker'), false);
   assert.equal(JSON.stringify(found).includes('superSecretValue'), false);
+});
+
+test('init previews without writing, then registers and indexes idempotently', t => {
+  const { root, repo } = fixture(t);
+  const home = join(root, 'new-store');
+  const cli = resolve('src/cli.ts');
+  const run = (...args: string[]) => JSON.parse(execFileSync(process.execPath, [cli, 'init', ...args, '--home', home], {
+    cwd: repo, encoding: 'utf8', timeout: 20000,
+  }));
+  const preview = run('--dry-run');
+  assert.equal(preview.dryRun, true);
+  assert.equal(preview.trackedSourceFiles, 1);
+  assert.equal(preview.checkoutPath, realpathSync(repo));
+  assert.equal(readdirSync(root).includes('new-store'), false);
+  const first = run();
+  assert.equal(first.initialized, true);
+  assert.equal(first.trackedSourceFiles, 1);
+  assert.equal(first.mcp.command, process.execPath);
+  assert.deepEqual(first.mcp.args.slice(1, 3), ['--checkout', first.checkoutId]);
+  const again = run();
+  assert.equal(again.checkoutId, first.checkoutId);
+  assert.equal(again.snapshotId, first.snapshotId);
+  assert.equal(again.reusedSnapshot, true);
+  assert.throws(() => execFileSync(process.execPath, [cli, 'status', '--dry-run', '--home', home], { stdio: 'pipe' }));
 });
