@@ -3,11 +3,14 @@ import { parseArgs } from 'node:util';
 import { Grove } from './store.ts';
 import { context } from './context.ts';
 import { backup, restoreBackup } from './backup.ts';
+import { groveInit } from './init.ts';
 
 const help = `Grove 0.3 — offline repository graphs and memory
 
-Usage: node src/cli.ts <command> [arguments]
+Usage: grove <command> [arguments] (or: node src/cli.ts <command> [arguments])
 
+  init [directory] [--dry-run] [--fork]
+                                    Register + index a checkout; print agent setup
   register <directory> [--fork]       Register a clone; --fork accepts changed origin as a new identity
   status                            Refresh availability and list repositories/checkouts
   index <checkout-id>                Publish/reuse a tracked-source file snapshot
@@ -35,17 +38,19 @@ try {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
     home: { type: 'string' }, help: { type: 'boolean' }, fork: { type: 'boolean' },
     confirm: { type: 'boolean' }, evidence: { type: 'string' }, reviewed: { type: 'boolean' },
-    'max-bytes': { type: 'string' },
+    'max-bytes': { type: 'string' }, 'dry-run': { type: 'boolean' },
   } });
   const [command, ...args] = positionals;
   if (values.help || !command) process.stdout.write(help);
   else {
-    const arities: Record<string, number> = { backup: 1, restore: 2, register: 1, status: 0, index: 1, graph: 1, 'mark-deleted': 1, remember: 2, memories: 1, context: 2 };
-    if (!Object.hasOwn(arities, command) || args.length !== arities[command]) throw new Error('Invalid command or arguments. Run with --help.');
+    const arities: Record<string, number> = { init: -1, backup: 1, restore: 2, register: 1, status: 0, index: 1, graph: 1, 'mark-deleted': 1, remember: 2, memories: 1, context: 2 };
+    if (!Object.hasOwn(arities, command) || (command === 'init' ? args.length > 1 : args.length !== arities[command])) throw new Error('Invalid command or arguments. Run with --help.');
+    if (values['dry-run'] && command !== 'init') throw new Error('--dry-run is only supported for init');
     if (command === 'mark-deleted' && !values.confirm) throw new Error('Use --confirm only after confirming this checkout was deleted');
-    if (command !== 'restore') store = new Grove(values.home);
+    if (command !== 'restore' && command !== 'init') store = new Grove(values.home);
     let result: unknown = command === 'restore' ? restoreBackup(args[0], args[1]) : undefined;
     switch (command) {
+      case 'init': result = groveInit(args[0], { home: values.home, dryRun: values['dry-run'], fork: values.fork }); break;
       case 'backup': result = backup(store!, args[0]); break;
       case 'restore': break;
       case 'register': result = store!.register(args[0], values.fork); break;
