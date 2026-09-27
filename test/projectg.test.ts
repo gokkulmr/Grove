@@ -176,7 +176,7 @@ test('CLI help needs no store and errors use a failing exit status', () => {
   const cli = resolve('src/cli.ts');
   const help = execFileSync(process.execPath, [cli, '--help'], { encoding: 'utf8' });
   assert.match(help, /No network/);
-  assert.match(help, /Grove 0.3/);
+  assert.match(help, /Grove 0\.4\.0-rc\.1/);
   assert.throws(() => execFileSync(process.execPath, [cli, 'mark-deleted', 'x'], { stdio: 'pipe' }), /Command failed/);
 });
 
