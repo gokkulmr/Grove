@@ -1,13 +1,17 @@
 {
   "name": "grove",
-  "version": "0.3.0",
+  "version": "0.4.0-rc.1",
   "private": true,
-  "bin": { "grove": "./src/cli.ts" },
+  "bin": { "grove": "./dist/cli.js", "grove-mcp": "./dist/mcp.js" },
+  "files": ["dist/", "vendor/", "assets/", "LICENSE", "README.md", "SECURITY.md"],
   "description": "Offline repository tracking, immutable file graphs, and persistent local memory.",
   "type": "module",
   "license": "MIT",
   "engines": { "node": ">=24.14.0" },
   "scripts": {
+    "build": "node scripts/build.mjs",
+    "bundle": "node scripts/bundle.mjs",
+    "test:package": "node --test test/package.test.mjs",
     "start": "node src/cli.ts",
     "mcp": "node src/mcp.ts",
     "test": "node --test test/*.test.ts"

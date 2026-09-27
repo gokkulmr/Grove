@@ -7,8 +7,10 @@ node_modules/
 .env.*
 .DS_Store
 coverage/
-# Original local research notes remain on this device; the public contract is docs/.
+# Original local research notes remain on this device; the public guide is README.md.
 /RESEARCH_AND_PLAN.md
 /BOTTLENECKS_AND_CONCEPTS.md
 
 /artifacts/
+
+/dist/

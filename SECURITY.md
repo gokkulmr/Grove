@@ -1,12 +1,19 @@
 # Security boundaries
 
-Grove is an early single-user local prototype. Do not treat it as a sandbox or
+Grove is a single-user local release candidate. Do not treat it as a sandbox or
 as an audited enterprise security boundary.
 
 The runtime has no networking features and invokes only fixed read-only local Git
-queries. Tests check this surface statically, and the 17-test suite passed with
-macOS network denial on 2026-09-23. Cross-platform child-process hardening and
+queries. Tests check this surface statically, and the suite is exercised with
+macOS network denial. The release README describes validation coverage. Cross-platform child-process hardening and
 deployment-specific checks are still required before strict deployment.
+
+Explicitly selected agent setup writes project-local MCP JSON configuration.
+It preserves unrelated entries, rejects unmanaged Grove entries and existing
+symlinked targets, and uses temporary files plus rename for each configuration.
+Multiple configuration files are not a single filesystem transaction; an I/O failure
+can leave one agent configured and another pending. Rerun init after resolving the
+error. Configurations contain local paths; review them before sharing.
 
 The stdio MCP server exposes metadata and reviewed memory to its local client.
 Bundled WASM parsers process tracked source locally. Optional source search scans
@@ -32,3 +39,16 @@ on a network filesystem. Missing paths are never automatically considered delete
 Report suspected vulnerabilities privately through GitHub's security reporting
 facilities when available; avoid publishing sensitive repository data or credentials
 in issue reports. No reporting action is performed by the application.
+
+Offline prompt suggestions append retrieved data without model inference. They
+preserve the original request, but appended memory is still untrusted reference
+text. A consuming model must not treat it as instructions. No prompt is submitted
+by Grove.
+
+Manual memory bundles are plaintext and unauthenticated. Repository and bundle
+hashes identify data; they do not prove who supplied it. Imports validate format,
+size and identity and are committed as a transaction. Imported memory is always a
+candidate until human review is explicitly confirmed against matching evidence.
+Conflicting statements are retained separately; Grove does not establish semantic
+truth. Exported memory can contain secrets entered by the user even though source
+bodies and checkout paths are not added by the exporter.
