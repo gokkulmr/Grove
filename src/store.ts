@@ -52,6 +52,9 @@ export class Grove {
         content_hash TEXT NOT NULL, language TEXT NOT NULL, parser_version TEXT NOT NULL, facts_json TEXT NOT NULL,
         PRIMARY KEY(content_hash, language, parser_version)
       );
+      CREATE TABLE IF NOT EXISTS memory_imports (
+        memory_id TEXT PRIMARY KEY REFERENCES memories(id), bundle_hash TEXT NOT NULL, imported_at TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS snapshot_facts (
         snapshot_id TEXT NOT NULL REFERENCES snapshots(id), path TEXT NOT NULL, facts_json TEXT NOT NULL,
         PRIMARY KEY(snapshot_id,path)
@@ -261,7 +264,8 @@ export class Grove {
     return rows.map(memory => {
       const fact = memory.evidence_path ? this.db.prepare('SELECT content_hash FROM files WHERE snapshot_id=? AND path=?')
         .get(indexed.snapshotId, memory.evidence_path) as any : null;
-      return { ...memory, freshness: !memory.evidence_hash ? 'unknown' : fact?.content_hash === memory.evidence_hash ? 'matching' : 'stale' };
+      const imported = this.db.prepare('SELECT bundle_hash,imported_at FROM memory_imports WHERE memory_id=?').get(memory.id);
+      return { ...memory, imported: imported ?? null, freshness: !memory.evidence_hash ? 'unknown' : fact?.content_hash === memory.evidence_hash ? 'matching' : 'stale' };
     });
   }
 }
