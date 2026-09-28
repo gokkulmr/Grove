@@ -22,6 +22,12 @@ validation is still pending. No measured token-savings claim is made.
 **Install Grove once. Run it inside a project you already have.** You do not need
 to clone Grove's source or make another copy of your project.
 
+### 1. Machine-wide installation — once per machine
+
+Install the CLI once in your npm global location. Every repository you work on
+can use that same `grove` command; do not install Grove separately in each repo.
+Run this step again only when installing Grove on another machine or upgrading it.
+
 Get `grove-0.4.0-rc.1.tgz` and its SHA-256 checksum from your release administrator
 or the [GitHub releases page](https://github.com/gokkulmr/Grove/releases).
 Maintainers can build both from this repository with `npm run bundle`, then transfer them
@@ -31,9 +37,28 @@ already be installed. Verify the bundle against the checksum from a trusted sour
 ```sh
 # Install the local bundle once; no registry access or install scripts.
 npm install -g ./grove-0.4.0-rc.1.tgz --offline --ignore-scripts --no-audit --no-fund
+grove --help
+```
 
-# Inside your existing project:
+Run the installation command from the folder containing the downloaded bundle,
+or supply its absolute path. It does not need to run inside a project. The CLI is
+available to repositories opened under the user/PATH using that npm prefix; it
+does not automatically configure other OS user accounts.
+
+If your npm global directory is restricted, install with
+`--prefix /path/to/user-owned/tools` and add that prefix's `bin` directory to PATH
+(on Windows, add the prefix itself). Grove is **not published to the npm registry**;
+`npm install -g grove` is not an installation instruction for this project.
+
+### 2. Project setup — once per checkout
+
+Use the already-installed CLI inside each existing Git project or new clone.
+This registers the checkout and builds its local graph; it does not reinstall Grove
+or add an npm dependency to your project.
+
+```sh
 cd /path/to/your/project
+grove init --dry-run
 grove init
 ```
 
@@ -64,10 +89,16 @@ Keep this outside every checkout. A clone with the same normalized Git origin ca
 use retained memory; changed evidence is marked stale. Intentional origin changes
 require `--fork`.
 
-If your npm global directory is restricted, install with
-`--prefix /path/to/user-owned/tools` and add that prefix's `bin` directory to PATH
-(on Windows, add the prefix itself). Grove is **not published to the npm registry**;
-`npm install -g grove` is not an installation instruction for this project.
+### When to repeat each step
+
+| Situation | What to run |
+| --- | --- |
+| First use on this machine | Install the bundle once, then `grove init` in your project. |
+| Another repository, clone, or Git worktree | Run `grove init` there; no npm installation needed. |
+| Switch branches in the same checkout | No installation or init needed; graph/context queries refresh against current files. |
+| Move or recreate a checkout | Run `grove init` at the new location and select your agents again. Retained memory is checked against current evidence. |
+| Upgrade Grove | Install the new bundle once; rerun `grove init` with your selected agents to refresh project wiring. |
+
 
 ## Why Grove
 
